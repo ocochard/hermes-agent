@@ -61,8 +61,11 @@ class TestInstallDependenciesRunner:
         # can trigger a real mid-run pip install. These tests exercise the
         # install ladder itself (against a fully mocked subprocess.run), so
         # they opt back in — the same both-directions override
-        # tests/tools/test_lazy_deps.py uses.
+        # tests/tools/test_lazy_deps.py uses.  _allow_lazy_installs is forced
+        # for the same reason: it defaults off on FreeBSD (pkg owns
+        # site-packages), a second gate ahead of the ladder under test.
         with _patch.dict(os.environ, {"HERMES_DISABLE_LAZY_INSTALLS": "0"}), \
+             patch("tools.lazy_deps._allow_lazy_installs", return_value=True), \
              patch("plugins.memory.find_provider_dir", return_value=tmp_path), \
              patch("hermes_cli.tools_config_cua.shutil.which", side_effect=which_side_effect), \
              patch("hermes_cli.tools_config_cua.subprocess.run", fake_run):
