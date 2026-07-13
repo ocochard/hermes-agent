@@ -396,7 +396,7 @@ _WIZARD_BANNER = (
 )
 
 
-_WIZARD_BACKEND_LABELS = {"systemd": "systemd", "launchd": "launchd", "windows": "Scheduled Task"}
+_WIZARD_BACKEND_LABELS = {"systemd": "systemd", "freebsd_rc": "rc.d", "launchd": "launchd", "windows": "Scheduled Task"}
 
 
 # Post-setup guidance when no service backend applies, keyed by the fallthrough reason.
