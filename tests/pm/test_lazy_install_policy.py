@@ -17,6 +17,11 @@ from hermes_cli.config import get_config_path
 ])
 def test_real_policy_is_boolean_and_fails_closed(monkeypatch, capsys, content, expected):
     monkeypatch.delenv("HERMES_DISABLE_LAZY_INSTALLS", raising=False)
+    # The absent-key default is off on FreeBSD, both at runtime and in the import-time
+    # template (test_lazy_installs_freebsd.py); pin the other platforms' behaviour here.
+    from hermes_cli.config_defaults import DEFAULT_CONFIG
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setitem(DEFAULT_CONFIG["security"], "allow_lazy_installs", True)
     config = get_config_path()
     config.write_text(content, encoding="utf-8")
 
