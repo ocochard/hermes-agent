@@ -2,6 +2,7 @@
 
 
 import pytest
+from unittest.mock import patch
 
 from agent.skill_utils import (
     get_disabled_skill_names,
@@ -376,10 +377,49 @@ def test_skill_support_path_uses_explicit_discovery_root_not_cwd(tmp_path, monke
     assert is_excluded_skill_path(relative, root=discovery_root) is True
 
 
-# ── skill_matches_platform on Termux ──────────────────────────────────────
+class TestSkillMatchesPlatformFreeBSD:
+    """FreeBSD reports sys.platform as "freebsd15" (etc.). Skills tagged
+    platforms:[linux] must load there because FreeBSD is a POSIX-compatible
+    Unix.
+    """
 
+    def test_linux_skill_loads_on_freebsd(self):
+        fm = {"platforms": ["linux"]}
+        with patch("agent.skill_utils.sys.platform", "freebsd15"):
+            assert skill_matches_platform(fm) is True
 
+    def test_linux_macos_windows_skill_loads_on_freebsd(self):
+        # The common bundled-skill tag used by github-*, devops, mlops, etc.
+        fm = {"platforms": ["linux", "macos", "windows"]}
+        with patch("agent.skill_utils.sys.platform", "freebsd15"):
+            assert skill_matches_platform(fm) is True
 
+    def test_macos_only_skill_still_excluded_on_freebsd(self):
+        # macOS-only skills should NOT load on FreeBSD. The fallback only
+        # widens platforms:[linux,...].
+        fm = {"platforms": ["macos"]}
+        with patch("agent.skill_utils.sys.platform", "freebsd15"):
+            assert skill_matches_platform(fm) is False
+
+    def test_windows_only_skill_still_excluded_on_freebsd(self):
+        fm = {"platforms": ["windows"]}
+        with patch("agent.skill_utils.sys.platform", "freebsd15"):
+            assert skill_matches_platform(fm) is False
+
+    def test_explicit_freebsd_tag_matches(self):
+        with patch("agent.skill_utils.sys.platform", "freebsd15"):
+            assert skill_matches_platform({"platforms": ["freebsd"]}) is True
+
+    def test_linux_skill_on_real_linux_unaffected(self):
+        # The non-FreeBSD Linux path must not change.
+        fm = {"platforms": ["linux"]}
+        with patch("agent.skill_utils.sys.platform", "linux"):
+            assert skill_matches_platform(fm) is True
+
+    def test_linux_skill_on_macos_unaffected(self):
+        fm = {"platforms": ["linux"]}
+        with patch("agent.skill_utils.sys.platform", "darwin"):
+            assert skill_matches_platform(fm) is False
 
 
 class TestNormalizeSkillLookupName:
