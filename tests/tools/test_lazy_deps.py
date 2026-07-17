@@ -120,6 +120,72 @@ class TestSecurityGating:
             ld.ensure("test.feat", prompt=False)
 
 
+    def test_default_enabled_on_linux(self, monkeypatch):
+        monkeypatch.delenv("HERMES_DISABLE_LAZY_INSTALLS", raising=False)
+        monkeypatch.setattr(ld.sys, "platform", "linux")
+        monkeypatch.setattr(
+            "hermes_cli.config.load_config",
+            lambda: {"security": {}},  # key absent → default fires
+        )
+        assert ld._allow_lazy_installs() is True
+
+    def test_default_enabled_on_macos(self, monkeypatch):
+        monkeypatch.delenv("HERMES_DISABLE_LAZY_INSTALLS", raising=False)
+        monkeypatch.setattr(ld.sys, "platform", "darwin")
+        monkeypatch.setattr(
+            "hermes_cli.config.load_config",
+            lambda: {"security": {}},
+        )
+        assert ld._allow_lazy_installs() is True
+
+    def test_default_disabled_on_freebsd(self, monkeypatch):
+        # FreeBSD packages own /usr/local/lib/pythonX.Y/site-packages; a
+        # runtime pip write there creates pkg-invisible files, and 4/34
+        # LAZY_DEPS features fail on FreeBSD anyway.  Default must be off.
+        monkeypatch.delenv("HERMES_DISABLE_LAZY_INSTALLS", raising=False)
+        monkeypatch.setattr(ld.sys, "platform", "freebsd16")
+        monkeypatch.setattr(
+            "hermes_cli.config.load_config",
+            lambda: {"security": {}},
+        )
+        assert ld._allow_lazy_installs() is False
+
+    def test_explicit_true_beats_freebsd_default(self, monkeypatch):
+        # A FreeBSD user in their own venv can opt back in.  The user's
+        # explicit config setting must override the platform default.
+        monkeypatch.delenv("HERMES_DISABLE_LAZY_INSTALLS", raising=False)
+        monkeypatch.setattr(ld.sys, "platform", "freebsd16")
+        monkeypatch.setattr(
+            "hermes_cli.config.load_config",
+            lambda: {"security": {"allow_lazy_installs": True}},
+        )
+        assert ld._allow_lazy_installs() is True
+
+    def test_explicit_false_still_wins_on_linux(self, monkeypatch):
+        # Regression: platform-gated default must not accidentally flip
+        # an explicit user opt-out into opt-in on non-FreeBSD.
+        monkeypatch.delenv("HERMES_DISABLE_LAZY_INSTALLS", raising=False)
+        monkeypatch.setattr(ld.sys, "platform", "linux")
+        monkeypatch.setattr(
+            "hermes_cli.config.load_config",
+            lambda: {"security": {"allow_lazy_installs": False}},
+        )
+        assert ld._allow_lazy_installs() is False
+
+    def test_config_template_defaults_off_on_freebsd(self, monkeypatch):
+        # The DEFAULT_CONFIG template is evaluated at import time; we can only verify its
+        # intent by re-evaluating the expression the template uses.  This guards against a
+        # future refactor dropping the platform check from config_defaults.py.
+        monkeypatch.setattr("hermes_cli.config_defaults.sys.platform", "freebsd16")
+        import importlib
+        import hermes_cli.config_defaults as cfg_mod
+        importlib.reload(cfg_mod)
+        assert cfg_mod.DEFAULT_CONFIG["security"]["allow_lazy_installs"] is False
+        # Reset so later tests aren't polluted.
+        monkeypatch.setattr("hermes_cli.config_defaults.sys.platform", "linux")
+        importlib.reload(cfg_mod)
+        assert cfg_mod.DEFAULT_CONFIG["security"]["allow_lazy_installs"] is True
+
     def test_config_failure_fails_open(self, monkeypatch):
         # If config can't be read at all, we ALLOW installs rather than
         # blocking the user out of their own backends.
@@ -445,6 +511,9 @@ class TestInstallSpecs:
     def test_never_raises_on_unexpected_error(self, monkeypatch):
         monkeypatch.delenv("HERMES_DISABLE_LAZY_INSTALLS", raising=False)
         monkeypatch.delenv(ld._LAZY_TARGET_ENV, raising=False)
+        # Pin a platform where lazy installs default on, so this exercises the
+        # installer-crash path rather than the FreeBSD default-off gate.
+        monkeypatch.setattr(ld.sys, "platform", "linux")
         monkeypatch.setattr(
             "hermes_cli.config.load_config", lambda: {}, raising=False
         )
