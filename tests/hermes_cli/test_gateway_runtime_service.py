@@ -485,6 +485,23 @@ def test_android_python_reaches_the_unmanaged_start(tmp_path, monkeypatch):
     assert spawned == [home.resolve()]
 
 
+def test_freebsd_reaches_the_unmanaged_start(tmp_path, monkeypatch):
+    """FreeBSD reports sys.platform as "freebsd<major>" and has no supervisor probe: ensure must
+    start the gateway unmanaged, not refuse the platform."""
+    from hermes_cli import gateway_runtime as runtime, gateway_runtime_service as service, gateway_runtime_start as start
+
+    home = tmp_path / "profile"
+    home.mkdir(mode=0o700)
+    spawned = []
+    monkeypatch.setattr(service.sys, "platform", "freebsd15")
+    monkeypatch.setattr(service, "_run", lambda *a, **k: pytest.fail("no supervisor to query on FreeBSD"))
+    monkeypatch.setattr(runtime, "discover_gateway_endpoint", lambda *a, **k: runtime.GatewayDiscovery("absent"))
+    monkeypatch.setattr(start, "spawn_unmanaged_gateway", lambda target, **k: spawned.append(Path(target)))
+    result = runtime.ensure_gateway_runtime(home, timeout=0.3)
+    assert result.reason_code != "unsupported_supervisor_platform"
+    assert spawned == [home.resolve()]
+
+
 def test_s6_runtime_ensure_starts_the_registered_gateway_slot(tmp_path, monkeypatch):
     """A Docker TUI client starts its s6 gateway instead of probing systemd."""
     from hermes_cli import gateway_runtime_service as service
