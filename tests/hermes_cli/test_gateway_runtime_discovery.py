@@ -1,6 +1,8 @@
 """Private discovery must not assume another process shares its temp root."""
 import json
+import os
 import socket
+import sys
 import tempfile
 import threading
 from pathlib import Path
@@ -335,3 +337,14 @@ def test_upgraded_same_owner_0644_lock_is_narrowed_not_inaccessible(tmp_path):
     os.link(lock, tmp_path / 'alias')
     assert missing_owner_state(home) == 'inaccessible'
     assert stat.S_IMODE(lock.stat().st_mode) == 0o644
+
+
+@pytest.mark.skipif(not sys.platform.startswith("freebsd"), reason="FreeBSD getpeereid(3)")
+def test_socket_peer_uid_on_freebsd():
+    """FreeBSD has no SO_PEERCRED; without getpeereid the peer is unknown and the gateway
+    refuses every session ticket."""
+    from hermes_cli.gateway_runtime_discovery import socket_peer_uid
+
+    left, right = socket.socketpair(socket.AF_UNIX)
+    with left, right:
+        assert socket_peer_uid(left) == os.getuid()
